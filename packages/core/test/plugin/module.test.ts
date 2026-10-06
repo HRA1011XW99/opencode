@@ -377,11 +377,23 @@ it.live("discovers exported specifiers from the resolved tree even when dist/ ex
     const [res1, res2] = yield* Effect.promise(() => Promise.all([first, second]))
     expect(res1).toBe(res2)
 
-    const winFilter = createForeignPackageFilter(["C:\\runner\\_work\\opencode\\node_modules\\effect"])
-    expect(winFilter.test("C:\\runner\\_work\\opencode\\node_modules\\effect\\dist\\index.js")).toBe(false)
-    expect(winFilter.test("C:/runner/_work/opencode/node_modules/effect/dist/index.js")).toBe(false)
+    const winFilter = createForeignPackageFilter([
+      "C:\\runner\\_work\\opencode\\node_modules\\.bun\\effect@4.0.0-rc.112\\node_modules\\effect",
+    ])
+    expect(
+      winFilter.test(
+        "C:\\runner\\_work\\opencode\\node_modules\\.bun\\effect@4.0.0-rc.112\\node_modules\\effect\\dist\\index.js",
+      ),
+    ).toBe(false)
+    expect(
+      winFilter.test(
+        "C:/runner/_work/opencode/node_modules/.bun/effect@4.0.0-rc.112/node_modules/effect/dist/index.js",
+      ),
+    ).toBe(false)
     expect(winFilter.test("C:\\Users\\plugin\\node_modules\\effect\\dist\\index.js")).toBe(true)
     expect(winFilter.test("C:/Users/plugin/node_modules/effect/dist/index.js")).toBe(true)
+    expect(winFilter.test("C:\\Users\\user\\.bun\\install\\cache\\effect@4.0.1@@@1\\dist\\index.js")).toBe(true)
+    expect(winFilter.test("C:/Users/user/.bun/install/cache/effect@4.0.1@@@1/dist/index.js")).toBe(true)
   }),
 )
 
