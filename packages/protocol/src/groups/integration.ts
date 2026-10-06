@@ -80,6 +80,27 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       ),
   )
   .add(
+    HttpApiEndpoint.post("integration.connect.form", "/api/integration/:integrationID/connect/form", {
+      params: { integrationID: Integration.ID },
+      query: LocationQuery,
+      payload: Schema.Struct({
+        methodID: Integration.MethodID,
+        answer: Schema.optional(Form.Answer),
+        label: Schema.optional(Schema.String),
+      }),
+      success: HttpApiSchema.NoContent,
+      error: [IntegrationNotFoundError, InvalidRequestError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "integration.connect.form",
+          summary: "Connect with setup form",
+          description: "Run a setup form method and store its key or external credential-source reference.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("integration.oauth.connect", "/api/integration/:integrationID/connect/oauth", {
       params: { integrationID: Integration.ID },
       query: LocationQuery,

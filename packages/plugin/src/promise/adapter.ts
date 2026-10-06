@@ -355,6 +355,7 @@ export function fromPromise(plugin: Plugin) {
             list: adaptApiMethod(IntegrationEndpoints["integration.list"], host.integration.list),
             get: adaptApiMethod(IntegrationEndpoints["integration.get"], host.integration.get),
             connect: {
+              form: adaptApiMethod(IntegrationEndpoints["integration.connect.form"], host.integration.connect.form),
               key: adaptApiMethod(IntegrationEndpoints["integration.connect.key"], host.integration.connect.key),
             },
             oauth: {
@@ -394,6 +395,11 @@ export function fromPromise(plugin: Plugin) {
                     method: {
                       list: editor.method.list,
                       update: (input) => {
+                        if ("connect" in input)
+                          return editor.method.update({
+                            ...input,
+                            connect: (answer) => Effect.tryPromise(() => input.connect(answer)),
+                          })
                         if (!("authorize" in input)) return editor.method.update(input)
                         const refresh = input.refresh
                         editor.method.update({

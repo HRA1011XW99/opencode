@@ -279,6 +279,13 @@ export const make = Effect.fn("PluginHost.make")(function* (
         return yield* response(Effect.succeed(item))
       }),
       connect: {
+        form: (input) =>
+          integration.connection.form({
+            integrationID: Integration.ID.make(input.integrationID),
+            methodID: Integration.MethodID.make(input.methodID),
+            answer: input.answer,
+            label: input.label,
+          }),
         key: (input) =>
           integration.connection.key({
             integrationID: Integration.ID.make(input.integrationID),
@@ -629,6 +636,12 @@ export function storage(kv: KV.Interface, pluginID: string): Plugin.Context["sto
 }
 
 function methodImplementation(input: IntegrationMethodRegistration): Integration.Implementation {
+  if ("connect" in input)
+    return {
+      integrationID: Integration.ID.make(input.integrationID),
+      method: { ...input.method, id: Integration.MethodID.make(input.method.id) },
+      connect: input.connect,
+    }
   if ("authorize" in input) {
     const refresh = input.refresh
     return {

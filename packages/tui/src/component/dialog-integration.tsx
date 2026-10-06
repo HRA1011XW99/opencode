@@ -1,4 +1,5 @@
-import { TextAttributes } from "@opentui/core"
+import { ScrollBoxRenderable, TextareaRenderable, TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import type {
   ConnectionInfo,
   IntegrationCommandConnectOutput,
@@ -12,7 +13,8 @@ import type {
   LocationRef,
 } from "@opencode/client"
 import { openUrl } from "@opencode/util/open"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -24,8 +26,17 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
 import { useToast } from "../ui/toast"
+import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
-import { formLabel, formToggleMultiselect, formValidateValue, type FormAnswerField } from "../util/form"
+import {
+  formInitialValues,
+  formLabel,
+  formRows,
+  formSelected,
+  formToggleMultiselect,
+  formValidateValue,
+  type FormAnswerField,
+} from "../util/form"
 
 const INTEGRATION_PRIORITY: Record<string, number> = {
   "opencode-go": 0,
@@ -40,6 +51,11 @@ type ConnectMethod = Exclude<IntegrationInfo["methods"][number], { type: "env" }
 type IntegrationAttempt = IntegrationOauthConnectOutput["data"]
 type CommandAttempt = IntegrationCommandConnectOutput["data"]
 type OnIntegrationConnected = (providerID?: string) => void
+type ConnectionContext = {
+  client: ReturnType<typeof useClient>
+  data: ReturnType<typeof useData>
+  toast: ReturnType<typeof useToast>
+}
 const CANCELLED = Symbol("cancelled")
 const CUSTOM = Symbol("custom")
 const OPEN = Symbol("open")
@@ -58,7 +74,11 @@ export function integrationOptions(list: IntegrationInfo[]) {
 export function connectMethods(integration: IntegrationInfo): ConnectMethod[] {
   return integration.methods
     .filter((method): method is ConnectMethod => method.type !== "env")
-    .toSorted((a, b) => Number(a.type === "key") - Number(b.type === "key"))
+    .toSorted(
+      (a, b) =>
+        ("order" in a && a.order !== undefined ? a.order : Number(a.type === "key")) -
+        ("order" in b && b.order !== undefined ? b.order : Number(b.type === "key")),
+    )
 }
 
 export function credentialConnections(integration: IntegrationInfo) {
@@ -77,6 +97,7 @@ export function DialogIntegration(
   props: { onConnected?: OnIntegrationConnected; integrationID?: string; autoConnect?: boolean } = {},
 ) {
   const data = useData()
+  const context = { client: useClient(), data, toast: useToast() }
   const currentLocation = useLocation()
   const dialog = useDialog()
   const theme = useTheme().surface("dialog")
@@ -96,7 +117,7 @@ export function DialogIntegration(
       manageConnections(integration, methods, location, dialog, props.onConnected)
       return
     }
-    selectMethod(integration, methods, location, dialog, props.onConnected)
+    selectMethod(integration, methods, location, dialog, context, props.onConnected)
   })
 
   const options = createMemo(() => {
@@ -121,7 +142,7 @@ export function DialogIntegration(
             : undefined,
         onSelect: () => {
           if (credentials.length) return manageConnections(integration, methods, location, dialog, props.onConnected)
-          return selectMethod(integration, methods, location, dialog, props.onConnected)
+          return selectMethod(integration, methods, location, dialog, context, props.onConnected)
         },
       }
     })
@@ -156,6 +177,7 @@ function manageConnections(
     const data = useData()
     const client = useClient()
     const toast = useToast()
+    const context = { client, data, toast }
     const theme = useTheme().surface("dialog")
     const shortcuts = Keymap.useShortcuts()
     const [deleting, setDeleting] = createSignal<string>()
@@ -180,7 +202,8 @@ function manageConnections(
                 {
                   title: "Add account",
                   value: "add",
-                  onSelect: () => selectMethod(current() ?? integration, methods, location, dialog, onConnected),
+                  onSelect: () =>
+                    selectMethod(current() ?? integration, methods, location, dialog, context, onConnected),
                 },
               ]
             : []),
@@ -201,7 +224,7 @@ function manageConnections(
                 onSelect: () => {
                   if (connection.status?.url) return void openUrl(connection.status.url).catch(toast.error)
                   if (connection.status)
-                    return selectMethod(current() ?? integration, methods, location, dialog, onConnected)
+                    return selectMethod(current() ?? integration, methods, location, dialog, context, onConnected)
                   if (credentialConnections(current() ?? integration)[0]?.id === connection.id) return
                   void client.api.credential.activate({ credentialID: connection.id }).catch(toast.error)
                 },
@@ -267,16 +290,17 @@ function selectMethod(
   methods: ConnectMethod[],
   location: LocationRef,
   dialog: ReturnType<typeof useDialog>,
+  context: ConnectionContext,
   onConnected?: OnIntegrationConnected,
 ) {
-  if (methods.length === 1) return openMethod(integration, methods[0], location, dialog, onConnected)
+  if (methods.length === 1) return openMethod(integration, methods[0], location, dialog, context, onConnected)
   dialog.replace(() => (
     <DialogSelect
       title={`Connect ${integration.name}`}
       options={methods.map((method) => ({
         title: method.type === "key" ? (method.label ?? "API key") : method.label,
         value: method.type === "key" ? "key" : method.id,
-        onSelect: () => openMethod(integration, method, location, dialog, onConnected),
+        onSelect: () => openMethod(integration, method, location, dialog, context, onConnected),
       }))}
     />
   ))
@@ -287,6 +311,7 @@ function openMethod(
   method: ConnectMethod,
   location: LocationRef,
   dialog: ReturnType<typeof useDialog>,
+  context: ConnectionContext,
   onConnected?: OnIntegrationConnected,
 ) {
   if (method.type === "key") {
@@ -299,7 +324,35 @@ function openMethod(
     ))
     return
   }
+  if (method.type === "form") {
+    void beginForm(integration, method, location, dialog, context, onConnected)
+    return
+  }
   void beginOAuth(integration, method, location, dialog, onConnected)
+}
+
+async function beginForm(
+  integration: IntegrationInfo,
+  method: Extract<ConnectMethod, { type: "form" }>,
+  location: LocationRef,
+  dialog: ReturnType<typeof useDialog>,
+  context: ConnectionContext,
+  onConnected?: OnIntegrationConnected,
+) {
+  const answer = method.form ? await formAnswer(dialog, method.label, method.form) : undefined
+  if (answer === null) return
+  await context.client.api.integration.connect
+    .form({
+      integrationID: integration.id,
+      methodID: method.id,
+      location: locationQuery(location),
+      answer,
+    })
+    .then(() => connected(integration, location, context.data, dialog, context.toast, onConnected))
+    .catch((cause) => {
+      context.toast.show({ variant: "error", message: errorMessage(cause) })
+      dialog.clear()
+    })
 }
 
 async function beginKey(
@@ -813,6 +866,13 @@ async function selectAnswer(
   title: string,
   field: Extract<FormAnswerField, { type: "boolean" | "string" }>,
 ): Promise<FormValue | undefined | typeof CANCELLED> {
+  if (field.type === "string" && field.custom)
+    return new Promise((resolve) => {
+      dialog.replace(
+        () => <StringChoiceField field={field} onSubmit={resolve} onCancel={() => resolve(CANCELLED)} />,
+        () => resolve(CANCELLED),
+      )
+    })
   const options =
     field.type === "boolean"
       ? field.default === false
@@ -829,18 +889,12 @@ async function selectAnswer(
           value: option.value as FormValue,
           description: option.description,
         }))
-  const choice = await new Promise<FormValue | typeof CUSTOM | undefined | typeof CANCELLED>((resolve) => {
+  return new Promise<FormValue | undefined | typeof CANCELLED>((resolve) => {
     dialog.replace(
       () => (
-        <DialogSelect<FormValue | typeof CUSTOM | undefined>
+        <DialogSelect<FormValue | undefined>
           title={formLabel(field) || title}
-          options={[
-            ...options,
-            ...(field.type === "string" && field.custom
-              ? [{ title: "Type your own answer", value: CUSTOM as typeof CUSTOM }]
-              : []),
-            ...(!field.required ? [{ title: "Skip", value: undefined }] : []),
-          ]}
+          options={[...options, ...(!field.required ? [{ title: "Skip", value: undefined }] : [])]}
           current={field.type === "string" ? field.default : undefined}
           onSelect={(option) => resolve(option.value)}
         />
@@ -848,11 +902,208 @@ async function selectAnswer(
       () => resolve(CANCELLED),
     )
   })
-  if (choice === CUSTOM) {
-    if (field.type !== "string") return CANCELLED
-    return textAnswer(dialog, title, field, "")
+}
+
+function StringChoiceField(props: {
+  field: Extract<FormAnswerField, { type: "string" }>
+  onSubmit: (value: string | undefined) => void
+  onCancel: () => void
+}) {
+  const theme = useTheme().surface("dialog")
+  const dimensions = useTerminalDimensions()
+  const rows = formRows(props.field)
+  const count = rows.length + (props.field.required ? 1 : 2)
+  const [store, setStore] = createStore({
+    selected: formSelected(props.field, props.field.default),
+    editing: false,
+    submitted: false,
+    text: formInitialValues([props.field]).custom[props.field.key] ?? "",
+    error: "",
+  })
+  const [inputTarget, setInputTarget] = createSignal<TextareaRenderable>()
+  let textarea: TextareaRenderable | undefined
+  let scroll: ScrollBoxRenderable | undefined
+  createEffect(() => {
+    const input = inputTarget()
+    if (!input || !store.submitted) return
+    input.traits = { suspend: true, status: "BUSY" }
+    input.blur()
+  })
+  createEffect(() => {
+    const selected = store.selected
+    const row = scroll?.getChildren()[selected]
+    if (row) scroll?.scrollChildIntoView(row.id)
+  })
+  const submit = (value: string | undefined) => {
+    if (store.submitted) return
+    const invalid = formValidateValue(props.field, value)
+    if (invalid) return setStore("error", invalid)
+    setStore("submitted", true)
+    props.onSubmit(value)
   }
-  return choice
+  const select = (index: number) => {
+    if (store.submitted) return
+    setStore({ selected: index, error: "" })
+    if (!props.field.required && index === rows.length + 1) {
+      submit(undefined)
+      return
+    }
+    if (index === rows.length) {
+      setStore("editing", true)
+      return
+    }
+    submit(String(rows[index].value))
+  }
+  const cancel = () => {
+    if (store.editing) {
+      setStore({ editing: false, text: textarea?.plainText ?? store.text, error: "" })
+      return
+    }
+    props.onCancel()
+  }
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    enabled: !store.editing && !store.submitted,
+    commands: [
+      {
+        id: "dialog.select.prev",
+        title: "Previous answer",
+        group: "Form",
+        run: () => setStore("selected", (store.selected + count - 1) % count),
+      },
+      {
+        id: "dialog.select.next",
+        title: "Next answer",
+        group: "Form",
+        run: () => setStore("selected", (store.selected + 1) % count),
+      },
+      { id: "dialog.select.submit", title: "Select answer", group: "Form", run: () => select(store.selected) },
+      { bind: "escape", title: "Cancel form", group: "Form", run: cancel },
+    ],
+  }))
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    priority: 1,
+    target: inputTarget,
+    enabled: store.editing && !store.submitted,
+    commands: [
+      {
+        id: "dialog.prompt.submit",
+        title: "Submit answer",
+        group: "Form",
+        run: () => submit(textarea?.plainText.trim() || undefined),
+      },
+      { bind: "escape", title: "Back to answers", group: "Form", run: cancel },
+    ],
+  }))
+  return (
+    <box paddingLeft={4} paddingRight={4} paddingBottom={1} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
+          {formLabel(props.field)}
+        </text>
+        <text fg={theme.text.muted} onMouseUp={cancel}>
+          esc
+        </text>
+      </box>
+      <Show when={props.field.description}>{(description) => <text fg={theme.text.muted}>{description()}</text>}</Show>
+      <scrollbox
+        gap={1}
+        height={Math.min(
+          count + rows.filter((row) => row.description).length,
+          Math.max(3, Math.floor(dimensions().height / 2) - 6),
+        )}
+        scrollbarOptions={{ visible: false }}
+        ref={(value: ScrollBoxRenderable) => {
+          scroll = value
+        }}
+      >
+        <For each={rows}>
+          {(row, index) => (
+            <box onMouseUp={() => select(index())}>
+              <box flexDirection="row" gap={1}>
+                <text fg={store.selected === index() ? theme.text.formfield.focused : theme.text.formfield.base}>
+                  {index() + 1}.
+                </text>
+                <text fg={store.selected === index() ? theme.text.formfield.focused : theme.text.formfield.base}>
+                  {row.label}
+                </text>
+              </box>
+              <Show when={row.description}>
+                {(description) => (
+                  <text paddingLeft={3} fg={theme.text.muted}>
+                    {description()}
+                  </text>
+                )}
+              </Show>
+            </box>
+          )}
+        </For>
+        <box flexDirection="row" gap={1} onMouseUp={() => select(rows.length)}>
+          <text fg={store.selected === rows.length ? theme.text.formfield.focused : theme.text.formfield.base}>
+            {rows.length + 1}.
+          </text>
+          <Show
+            when={store.editing}
+            fallback={
+              <text fg={store.selected === rows.length ? theme.text.formfield.focused : theme.text.formfield.base}>
+                {store.text || "Type your own answer"}
+              </text>
+            }
+          >
+            <textarea
+              height={1}
+              flexGrow={1}
+              wrapMode="none"
+              initialValue={store.text}
+              placeholder={props.field.placeholder ?? "Type your own answer"}
+              placeholderColor={theme.text.muted}
+              textColor={theme.text.formfield.focused}
+              focusedTextColor={theme.text.formfield.focused}
+              cursorColor={theme.text.formfield.focused}
+              ref={(value: TextareaRenderable) => {
+                textarea = value
+                setInputTarget(value)
+                value.traits = { status: "ANSWER" }
+                queueMicrotask(() => {
+                  if (value.isDestroyed) return
+                  value.focus()
+                  value.gotoLineEnd()
+                })
+              }}
+              onContentChange={() => {
+                if (!textarea) return
+                const text = textarea.plainText
+                setStore("text", text)
+                if (store.error && !formValidateValue(props.field, text.trim() || undefined)) setStore("error", "")
+              }}
+            />
+          </Show>
+        </box>
+        <Show when={!props.field.required}>
+          <box flexDirection="row" gap={1} onMouseUp={() => select(rows.length + 1)}>
+            <text fg={store.selected === rows.length + 1 ? theme.text.formfield.focused : theme.text.formfield.base}>
+              {rows.length + 2}.
+            </text>
+            <text fg={store.selected === rows.length + 1 ? theme.text.formfield.focused : theme.text.formfield.base}>
+              Skip
+            </text>
+          </box>
+        </Show>
+      </scrollbox>
+      <Show when={store.error}>{(error) => <text fg={theme.text.feedback.error.base}>{error()}</text>}</Show>
+      <Show
+        when={store.submitted}
+        fallback={
+          <text fg={theme.text.muted}>
+            {store.editing ? "enter submit · esc back" : "↑/↓ select · enter confirm · esc cancel"}
+          </text>
+        }
+      >
+        <Spinner color={theme.text.muted}>Connecting…</Spinner>
+      </Show>
+    </box>
+  )
 }
 
 function textAnswer(
@@ -866,11 +1117,14 @@ function textAnswer(
       () => {
         const theme = useTheme().surface("dialog")
         const [error, setError] = createSignal<string>()
+        const [busy, setBusy] = createSignal(false)
         return (
           <DialogPrompt
             title={formLabel(field) || title}
             placeholder={field.type === "string" ? field.placeholder : undefined}
+            secret={field.type === "string" && field.format === "password"}
             value={initial}
+            busy={busy()}
             onConfirm={(input) => {
               const text = input.trim()
               const value = text === "" && !field.required ? undefined : field.type === "string" ? text : Number(text)
@@ -879,6 +1133,7 @@ function textAnswer(
                 setError(invalid)
                 return
               }
+              setBusy(true)
               resolve(value)
             }}
             description={() => (

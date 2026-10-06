@@ -45,6 +45,9 @@ export type CommandMethod = Integration.CommandMethod
 export const KeyMethod = Integration.KeyMethod
 export type KeyMethod = Integration.KeyMethod
 
+export const FormMethod = Integration.FormMethod
+export type FormMethod = Integration.FormMethod
+
 export const EnvMethod = Integration.EnvMethod
 export type EnvMethod = Integration.EnvMethod
 
@@ -82,6 +85,12 @@ export interface KeyImplementation {
   readonly method: KeyMethod
 }
 
+export interface FormImplementation {
+  readonly integrationID: ID
+  readonly method: FormMethod
+  readonly connect: (answer: Form.Answer) => Effect.Effect<Credential.Key | Credential.External, unknown>
+}
+
 export interface CommandImplementation {
   readonly integrationID: ID
   readonly method: CommandMethod
@@ -92,7 +101,12 @@ export interface EnvImplementation {
   readonly method: EnvMethod
 }
 
-export type Implementation = OAuthImplementation | CommandImplementation | KeyImplementation | EnvImplementation
+export type Implementation =
+  | OAuthImplementation
+  | CommandImplementation
+  | KeyImplementation
+  | EnvImplementation
+  | FormImplementation
 
 export const Attempt = Integration.Attempt
 export type Attempt = Integration.Attempt
@@ -136,6 +150,7 @@ type Entry = {
   ref: Types.DeepMutable<Ref>
   methods: Types.DeepMutable<Method>[]
   implementations: Map<MethodID, Types.DeepMutable<OAuthImplementation>>
+  forms: Map<MethodID, Types.DeepMutable<FormImplementation>>
 }
 
 type Data = {
@@ -178,6 +193,13 @@ export interface Interface extends State.Transformable<Editor> {
       /** Values collected from the method's form fields. */
       readonly answer?: Form.Answer
       /** User-facing label for the stored credential. */
+      readonly label?: string
+    }) => Effect.Effect<void, AuthorizationError>
+    /** Validates a setup form and stores the credential returned by its implementation. */
+    readonly form: (input: {
+      readonly integrationID: ID
+      readonly methodID: MethodID
+      readonly answer?: Form.Answer
       readonly label?: string
     }) => Effect.Effect<void, AuthorizationError>
     /** Selects a stored credential as the active integration connection. */
@@ -301,6 +323,7 @@ const layer = Layer.effect(
             ref: { id, name: id },
             methods: [],
             implementations: new Map(),
+            forms: new Map(),
           }
           if (!editor.integrations.has(id)) editor.integrations.set(id, current)
           update(current.ref)
@@ -317,6 +340,7 @@ const layer = Layer.effect(
               },
               methods: [],
               implementations: new Map<MethodID, Types.DeepMutable<OAuthImplementation>>(),
+              forms: new Map<MethodID, Types.DeepMutable<FormImplementation>>(),
             }
             if (!editor.integrations.has(implementation.integrationID)) {
               editor.integrations.set(implementation.integrationID, current)
@@ -326,6 +350,8 @@ const layer = Layer.effect(
               if (method.type === "oauth" && implementation.method.type === "oauth")
                 return method.id === implementation.method.id
               if (method.type === "command" && implementation.method.type === "command")
+                return method.id === implementation.method.id
+              if (method.type === "form" && implementation.method.type === "form")
                 return method.id === implementation.method.id
               return true
             })
@@ -337,6 +363,8 @@ const layer = Layer.effect(
                 implementation as Types.DeepMutable<OAuthImplementation>,
               )
             }
+            if ("connect" in implementation)
+              current.forms.set(implementation.method.id, implementation as Types.DeepMutable<FormImplementation>)
           },
           remove: (integrationID, method) => {
             const current = editor.integrations.get(integrationID)
@@ -345,10 +373,12 @@ const layer = Layer.effect(
               if (candidate.type !== method.type) return false
               if (candidate.type === "oauth" && method.type === "oauth") return candidate.id === method.id
               if (candidate.type === "command" && method.type === "command") return candidate.id === method.id
+              if (candidate.type === "form" && method.type === "form") return candidate.id === method.id
               return true
             })
             if (index !== -1) current.methods.splice(index, 1)
             if (method.type === "oauth") current.implementations.delete(method.id)
+            if (method.type === "form") current.forms.delete(method.id)
           },
         },
       }),
@@ -737,6 +767,25 @@ const layer = Layer.effect(
           })
         }),
         activate: Effect.fn("Integration.connection.activate")((credentialID) => credentials.activate(credentialID)),
+        form: Effect.fn("Integration.connection.form")(function* (input) {
+          const implementation = state.get().integrations.get(input.integrationID)?.forms.get(input.methodID)
+          if (!implementation) return yield* new AuthorizationError({ cause: new Error("Connection method not found") })
+          const answer = input.answer ?? {}
+          if (implementation.method.form) {
+            const invalid =
+              Form.validateFields(implementation.method.form) ?? Form.validateAnswer(implementation.method.form, answer)
+            if (invalid) return yield* new AuthorizationError({ cause: new Error(invalid) })
+          }
+          if (!implementation.method.form && Object.keys(answer).length > 0)
+            return yield* new AuthorizationError({
+              cause: new Error("Connection method does not accept a form answer"),
+            })
+          yield* createCredential({
+            integrationID: input.integrationID,
+            label: input.label,
+            value: yield* authorize(implementation.connect(answer)),
+          })
+        }),
         update: Effect.fn("Integration.connection.update")((credentialID, updates) =>
           credentials.update(credentialID, updates),
         ),

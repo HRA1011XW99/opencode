@@ -137,12 +137,14 @@ const answerField = Effect.fn("cli.auth.form.field")(function* (field: FormField
     if (value !== custom) return value
   }
   const value = yield* prompt<string>(() =>
-    text({
-      message,
-      placeholder: field.type === "string" ? field.placeholder : undefined,
-      initialValue: field.default === undefined ? undefined : String(field.default),
-      validate: (input) => validateText(field, input),
-    }),
+    field.type === "string" && field.format === "password"
+      ? password({ message, validate: (input) => validateText(field, input) })
+      : text({
+          message,
+          placeholder: field.type === "string" ? field.placeholder : undefined,
+          initialValue: field.default === undefined ? undefined : String(field.default),
+          validate: (input) => validateText(field, input),
+        }),
   )
   if (!value && !field.required) return undefined
   if (field.type === "string") return value

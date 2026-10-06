@@ -13,6 +13,7 @@ export type DialogPromptProps = {
   description?: () => JSX.Element
   placeholder?: string
   value?: string
+  secret?: boolean
   busy?: boolean
   busyText?: string
   onConfirm?: (value: string) => void
@@ -113,6 +114,8 @@ export function DialogPrompt(props: DialogPromptProps) {
       <box gap={1}>
         {props.description?.()}
         <textarea
+          attributes={props.secret ? TextAttributes.HIDDEN : TextAttributes.NONE}
+          selectable={!props.secret}
           height={1}
           wrapMode="none"
           ref={(val: TextareaRenderable) => {

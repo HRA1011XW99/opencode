@@ -127,6 +127,13 @@ const authenticate = Effect.fn("cli.auth.login.authenticate")(function* (
 ) {
   if (method.type === "key") return yield* keyLogin(client, integration, method, answer)
   if (method.type === "command") return yield* commandLogin(client, integration, method)
+  if (method.type === "form")
+    return yield* request((signal) =>
+      client.integration.connect.form(
+        { integrationID: integration.id, methodID: method.id, answer, location },
+        { signal },
+      ),
+    )
   return yield* oauthLogin(client, integration, method, answer)
 })
 

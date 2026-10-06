@@ -35,8 +35,19 @@ export interface KeyMethod extends Schema.Schema.Type<typeof KeyMethod> {}
 export const KeyMethod = Schema.Struct({
   type: Schema.Literal("key"),
   label: optional(Schema.String),
+  order: optional(Schema.Finite),
   form: optional(Form.Fields),
 }).annotate({ identifier: "Integration.KeyMethod" })
+
+/** A setup form that saves a credential without an OAuth or command attempt. */
+export interface FormMethod extends Schema.Schema.Type<typeof FormMethod> {}
+export const FormMethod = Schema.Struct({
+  id: MethodID,
+  type: Schema.Literal("form"),
+  label: Schema.String,
+  order: optional(Schema.Finite),
+  form: optional(Form.Fields),
+}).annotate({ identifier: "Integration.FormMethod" })
 
 export interface EnvMethod extends Schema.Schema.Type<typeof EnvMethod> {}
 export const EnvMethod = Schema.Struct({
@@ -44,7 +55,7 @@ export const EnvMethod = Schema.Struct({
   names: Schema.Array(Schema.String),
 }).annotate({ identifier: "Integration.EnvMethod" })
 
-export const Method = Schema.Union([OAuthMethod, CommandMethod, KeyMethod, EnvMethod])
+export const Method = Schema.Union([OAuthMethod, CommandMethod, KeyMethod, EnvMethod, FormMethod])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Integration.Method" })
 export type Method = typeof Method.Type

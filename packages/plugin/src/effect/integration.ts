@@ -25,6 +25,15 @@ export interface IntegrationCommandMethod {
 export interface IntegrationKeyMethod {
   readonly type: "key"
   readonly label?: string
+  readonly order?: number
+  readonly form?: Form.Fields
+}
+
+export interface IntegrationFormMethod {
+  readonly id: string
+  readonly type: "form"
+  readonly label: string
+  readonly order?: number
   readonly form?: Form.Fields
 }
 
@@ -38,6 +47,7 @@ export type IntegrationMethod =
   | IntegrationCommandMethod
   | IntegrationKeyMethod
   | IntegrationEnvMethod
+  | IntegrationFormMethod
 
 export type IntegrationOAuthAuthorization = {
   readonly url: string
@@ -62,6 +72,11 @@ export type IntegrationOAuthMethodRegistration = {
 }
 export type IntegrationMethodRegistration =
   | IntegrationOAuthMethodRegistration
+  | {
+      readonly integrationID: string
+      readonly method: IntegrationFormMethod
+      readonly connect: (answer: Form.Answer) => Effect.Effect<Credential.Key | Credential.External, unknown>
+    }
   | {
       readonly integrationID: string
       readonly method: IntegrationCommandMethod

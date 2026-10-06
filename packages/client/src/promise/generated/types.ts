@@ -1445,7 +1445,7 @@ export type FormStringField = {
   hidden?: boolean
   when?: Array<FormWhen>
   type: "string"
-  format?: "email" | "uri" | "date" | "date-time"
+  format?: "email" | "uri" | "date" | "date-time" | "password"
   minLength?: number
   maxLength?: number
   pattern?: string
@@ -1617,7 +1617,7 @@ export type FormStringField1 = {
   hidden?: boolean
   when?: Array<FormWhen1>
   type: "string"
-  format?: "email" | "uri" | "date" | "date-time"
+  format?: "email" | "uri" | "date" | "date-time" | "password"
   minLength?: number
   maxLength?: number
   pattern?: string
@@ -2312,7 +2312,9 @@ export type FormDetail = {
 
 export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; form?: FormFields }
 
-export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
+export type IntegrationKeyMethod = { type: "key"; label?: string; order?: number; form?: FormFields }
+
+export type IntegrationFormMethod = { id: string; type: "form"; label: string; order?: number; form?: FormFields }
 
 export type CredentialEntry = {
   id: string
@@ -2352,6 +2354,7 @@ export type IntegrationMethod =
   | IntegrationCommandMethod
   | IntegrationKeyMethod
   | IntegrationEnvMethod
+  | IntegrationFormMethod
 
 export type FormCreated = {
   id: string
@@ -4665,7 +4668,7 @@ export type SessionFormCreateInput = {
               readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
             }>
             readonly type: "string"
-            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly format?: "email" | "uri" | "date" | "date-time" | "password"
             readonly minLength?: number
             readonly maxLength?: number
             readonly pattern?: string
@@ -4767,7 +4770,7 @@ export type SessionFormCreateInput = {
               readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
             }>
             readonly type: "string"
-            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly format?: "email" | "uri" | "date" | "date-time" | "password"
             readonly minLength?: number
             readonly maxLength?: number
             readonly pattern?: string
@@ -4876,7 +4879,7 @@ export type SessionFormCreateInput = {
               readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
             }>
             readonly type: "string"
-            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly format?: "email" | "uri" | "date" | "date-time" | "password"
             readonly minLength?: number
             readonly maxLength?: number
             readonly pattern?: string
@@ -4978,7 +4981,7 @@ export type SessionFormCreateInput = {
               readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
             }>
             readonly type: "string"
-            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly format?: "email" | "uri" | "date" | "date-time" | "password"
             readonly minLength?: number
             readonly maxLength?: number
             readonly pattern?: string
@@ -5087,7 +5090,7 @@ export type SessionFormCreateInput = {
               readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
             }>
             readonly type: "string"
-            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly format?: "email" | "uri" | "date" | "date-time" | "password"
             readonly minLength?: number
             readonly maxLength?: number
             readonly pattern?: string
@@ -5189,7 +5192,7 @@ export type SessionFormCreateInput = {
               readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
             }>
             readonly type: "string"
-            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly format?: "email" | "uri" | "date" | "date-time" | "password"
             readonly minLength?: number
             readonly maxLength?: number
             readonly pattern?: string
@@ -5298,7 +5301,7 @@ export type SessionFormCreateInput = {
               readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
             }>
             readonly type: "string"
-            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly format?: "email" | "uri" | "date" | "date-time" | "password"
             readonly minLength?: number
             readonly maxLength?: number
             readonly pattern?: string
@@ -5400,7 +5403,7 @@ export type SessionFormCreateInput = {
               readonly value: string | number | "Infinity" | "-Infinity" | "NaN" | boolean
             }>
             readonly type: "string"
-            readonly format?: "email" | "uri" | "date" | "date-time"
+            readonly format?: "email" | "uri" | "date" | "date-time" | "password"
             readonly minLength?: number
             readonly maxLength?: number
             readonly pattern?: string
@@ -5687,6 +5690,28 @@ export type IntegrationConnectKeyInput = {
 }
 
 export type IntegrationConnectKeyOutput = void
+
+export type IntegrationConnectFormInput = {
+  readonly integrationID: { readonly integrationID: string }["integrationID"]
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+  readonly methodID: {
+    readonly methodID: string
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
+    readonly label?: string | undefined
+  }["methodID"]
+  readonly answer?: {
+    readonly methodID: string
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
+    readonly label?: string | undefined
+  }["answer"]
+  readonly label?: {
+    readonly methodID: string
+    readonly answer?: { readonly [x: string]: string | number | boolean | ReadonlyArray<string> } | undefined
+    readonly label?: string | undefined
+  }["label"]
+}
+
+export type IntegrationConnectFormOutput = void
 
 export type IntegrationOauthConnectInput = {
   readonly integrationID: { readonly integrationID: string }["integrationID"]

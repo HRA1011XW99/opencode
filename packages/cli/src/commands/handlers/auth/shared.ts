@@ -48,7 +48,11 @@ export type ConnectMethod = Exclude<IntegrationMethod, { type: "env" }>
 export function connectMethods(integration: IntegrationInfo) {
   return integration.methods
     .filter((method): method is ConnectMethod => method.type !== "env")
-    .toSorted((a, b) => Number(a.type === "key") - Number(b.type === "key"))
+    .toSorted(
+      (a, b) =>
+        ("order" in a && a.order !== undefined ? a.order : Number(a.type === "key")) -
+        ("order" in b && b.order !== undefined ? b.order : Number(b.type === "key")),
+    )
 }
 
 export const resolveMethod = Effect.fn("cli.auth.resolve-method")(function* (methods: ConnectMethod[], target: string) {
