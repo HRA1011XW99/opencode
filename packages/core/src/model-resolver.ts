@@ -6,6 +6,7 @@ import { Auth } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
 import { Credential } from "./credential.js"
+import { BedrockAuth } from "@opencode/ai/protocols/utils/bedrock-auth"
 import { Integration } from "./integration.js"
 import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js"
 import type { RuntimeInfo } from "./model.js"
@@ -199,7 +200,13 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   dependencies?: Dependencies,
 ) {
   const resolved = prepareRuntimeModel(model, credential)
-  const configuration = credential?.type === "key" ? credential.configuration : undefined
+  const configuration =
+    credential?.type === "key"
+      ? credential.configuration?.auth === "sigv4" &&
+        resolved.package?.startsWith("@opencode/ai/providers/amazon-bedrock")
+        ? Struct.omit(credential.configuration, ["accessKeyId", "sessionToken"])
+        : credential.configuration
+      : undefined
   const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
   if (Provider.isAISDK(resolved.package)) {
     const loadAISDK = dependencies?.loadAISDK
@@ -207,7 +214,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     const settings = yield* prepareProviderSettings(
       resolved,
       Provider.mergeOverlay(resolved.settings, {
-        ...nativeCredentialSettings(resolved.package ?? "", credential),
+        ...nativeCredentialSettings(resolved.package ?? "", credential, configured),
         ...credential?.metadata,
         ...configuration,
       }) ?? {},
@@ -225,7 +232,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   const settings = {
     ...(credential ? Struct.omit(mapped, ["accessToken", "apiKey", "authToken"]) : mapped),
     ...(resolved.canonical === undefined ? {} : { provider: resolved.canonical }),
-    ...nativeCredentialSettings(specifier, credential),
+    ...nativeCredentialSettings(specifier, credential, configured),
     headers: resolved.headers,
     body: resolved.body,
   }
@@ -305,8 +312,33 @@ function unresolvedProviderVariables(model: RuntimeInfo, baseURL: string) {
   })
 }
 
-const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
-  if (!credential || credential.type === "external") return {}
+const nativeCredentialSettings = (
+  specifier: string,
+  credential: Credential.Value | undefined,
+  settings: Readonly<Record<string, unknown>>,
+) => {
+  if (!credential) return {}
+  if (credential.type === "external") {
+    if (specifier.startsWith("@opencode/ai/providers/amazon-bedrock") && credential.methodID === "aws-credentials")
+      return { auth: "sigv4", profile: credential.metadata.profile, credentials: undefined }
+    return {}
+  }
+  if (
+    credential.type === "key" &&
+    specifier.startsWith("@opencode/ai/providers/amazon-bedrock") &&
+    credential.configuration?.auth === "sigv4"
+  )
+    return {
+      auth: "sigv4",
+      credentials: {
+        region: BedrockAuth.resolveRegion({
+          region: typeof settings.region === "string" ? settings.region : undefined,
+        }),
+        accessKeyId: credential.configuration.accessKeyId,
+        secretAccessKey: credential.key,
+        ...(credential.configuration.sessionToken ? { sessionToken: credential.configuration.sessionToken } : {}),
+      },
+    }
   if (credential.type === "key") return { apiKey: credential.key }
   if (specifier === "@opencode/ai/providers/anthropic" || specifier === "@opencode/ai/providers/anthropic-compatible")
     return { authToken: credential.access }
