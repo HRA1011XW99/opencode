@@ -106,6 +106,30 @@ describe("tool.glob", () => {
     }),
   )
 
+  // chiyao: files the user asks for are often in ignored folders; fall back to searching them
+  it.instance("falls back to ignored paths when nothing else matches", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const write = (rel: string, body: string) => Effect.promise(() => Bun.write(path.join(test.directory, rel), body))
+      yield* write(".ignore", "assets/\nnode_modules/\n")
+      yield* write("assets/五条悟/model.moc3", "x")
+      yield* write("node_modules/pkg/other.moc3", "x")
+      const info = yield* GlobTool
+      const glob = yield* info.init()
+      const found = yield* glob.execute({ pattern: "**/*.moc3", path: test.directory }, ctx)
+      expect(found.metadata.count).toBe(1)
+      expect(found.output).toContain(path.join(test.directory, "assets", "五条悟", "model.moc3"))
+      expect(found.output).toContain("excluded by .gitignore")
+      expect(found.output).not.toContain("node_modules")
+
+      yield* write("src/kept.moc3", "x")
+      const normal = yield* glob.execute({ pattern: "**/*.moc3", path: test.directory }, ctx)
+      expect(normal.metadata.count).toBe(1)
+      expect(normal.output).toContain(path.join(test.directory, "src", "kept.moc3"))
+      expect(normal.output).not.toContain("excluded by .gitignore")
+    }),
+  )
+
   it.instance("rejects exact file paths", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

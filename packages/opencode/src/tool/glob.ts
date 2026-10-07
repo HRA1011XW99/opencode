@@ -47,11 +47,19 @@ export const GlobTool = Tool.define(
           })
 
           const limit = 100
-          const files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit })
+          let files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit })
+          // chiyao: on a user's computer the wanted files are often in git-ignored folders (assets, downloads,
+          // model packs). Nothing found -> search again including ignored paths.
+          let ignored = false
+          if (files.length === 0) {
+            files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit, noIgnore: true })
+            ignored = files.length > 0
+          }
           const truncated = files.length === limit
 
           const output = []
           if (files.length === 0) output.push("No files found")
+          if (ignored) output.push("(Nothing matched outside ignored paths. These results are in files or folders excluded by .gitignore or other ignore rules.)")
           if (files.length > 0) {
             output.push(...files.map((file) => path.resolve(search, file.path)))
             if (truncated) {

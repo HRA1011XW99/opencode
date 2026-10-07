@@ -60,12 +60,18 @@ export const GrepTool = Tool.define(
           const search = FSUtil.resolve(requested)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           const cwd = info?.type === "Directory" ? search : path.dirname(search)
-          const result = yield* ripgrep.grep({
+          let result = yield* ripgrep.grep({
             cwd,
             pattern: params.pattern,
             include: params.include,
             limit: 100,
           })
+          // chiyao: nothing found -> search again including git-ignored paths (see glob.ts)
+          let ignored = false
+          if (result.length === 0) {
+            result = yield* ripgrep.grep({ cwd, pattern: params.pattern, include: params.include, limit: 100, noIgnore: true })
+            ignored = result.length > 0
+          }
           if (result.length === 0) return empty
 
           const rows = result.map((item) => ({
@@ -85,6 +91,7 @@ export const GrepTool = Tool.define(
           const total = rows.length
           const hasMore = truncated || result.length === limit
           const output = [`Found ${total} matches${hasMore ? " (more matches available)" : ""}`]
+          if (ignored) output.push("(Nothing matched outside ignored paths. These results are in files or folders excluded by .gitignore or other ignore rules.)")
 
           let current = ""
           for (const match of final) {

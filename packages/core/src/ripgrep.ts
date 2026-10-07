@@ -62,6 +62,7 @@ export interface GlobInput {
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
+  readonly noIgnore?: boolean
   readonly hidden?: boolean
   readonly follow?: boolean
   readonly signal?: AbortSignal
@@ -70,6 +71,7 @@ export interface GlobInput {
 export interface GrepInput {
   readonly cwd: string
   readonly pattern: string
+  readonly noIgnore?: boolean
   readonly file?: string
   readonly include?: string
   readonly limit: number
@@ -162,6 +164,8 @@ const layer = Layer.effect(
             "--files",
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
+            // chiyao: noIgnore also searches files excluded by .gitignore / .ignore, still skipping node_modules
+            ...(input.noIgnore ? ["--no-ignore", "--glob=!**/node_modules/**"] : []),
             `--glob=${input.pattern}`,
             "--glob=!**/.git/**",
             ".",
@@ -223,6 +227,8 @@ const layer = Layer.effect(
             "--json",
             "--hidden",
             "--no-messages",
+            // chiyao: noIgnore also searches files excluded by .gitignore / .ignore, still skipping node_modules
+            ...(input.noIgnore ? ["--no-ignore", "--glob=!**/node_modules/**"] : []),
             ...(input.include ? [`--glob=${input.include}`] : []),
             "--glob=!**/.git/**",
             "--",
