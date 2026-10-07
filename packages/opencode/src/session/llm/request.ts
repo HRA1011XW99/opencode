@@ -14,6 +14,7 @@ import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
 import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
+import { ChiyaoHook } from "@/chiyao/hook"
 
 const USER_AGENT = `opencode/${InstallationVersion}`
 
@@ -98,7 +99,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
   if (isOpenaiOauth) options.instructions = system.join("\n")
 
-  const messages =
+  const assembled =
     isOpenaiOauth || input.isWorkflow
       ? input.messages
       : [
@@ -110,6 +111,13 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
           ),
           ...input.messages,
         ]
+  // Chiyao: role context for top-level, visible-agent turns only (not titles, summaries or subagents).
+  const messages =
+    ChiyaoHook.enabled() && !input.small && !input.parentSessionID && !input.agent.hidden
+      ? yield* Effect.promise(() =>
+          ChiyaoHook.inject({ sessionID: input.sessionID, userMessageID: input.user.id, messages: assembled }),
+        )
+      : assembled
 
   const params = yield* input.plugin.trigger(
     "chat.params",

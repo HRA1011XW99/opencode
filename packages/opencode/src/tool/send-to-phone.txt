@@ -1,0 +1,7 @@
+Send a file from this computer to the user's phone. The user can preview it there (images, video, audio, HTML, PDF, Word .docx, spreadsheets, Markdown, code and plain text) or download it.
+
+Usage notes:
+- Use this when the user asks for a file, or when you finish a deliverable the user will want to look at (a report, a chart, a document, a generated page).
+- `filePath` must point to an existing file, not a directory. Zip a directory first if the user needs all of it.
+- `note` is an optional one-line description shown with the file.
+- Files larger than 200 MB are rejected.

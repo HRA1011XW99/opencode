@@ -12,6 +12,8 @@ import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { Database } from "@opencode-ai/core/database/database"
 import { TodoWriteTool } from "./todo"
+import { SendToPhoneTool } from "./send-to-phone"
+import { ChiyaoHook } from "@/chiyao/hook"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
@@ -103,6 +105,7 @@ const layer = Layer.effect(
     const read = yield* ReadTool
     const question = yield* QuestionTool
     const todo = yield* TodoWriteTool
+    const sendToPhone = yield* SendToPhoneTool
     const lsptool = yield* LspTool
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
@@ -223,6 +226,7 @@ const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          ...(ChiyaoHook.enabled() ? { sendToPhone: Tool.init(sendToPhone) } : {}),
           ...(codeModeTool ? { execute: Tool.init(codeModeTool) } : {}),
         })
 
@@ -244,6 +248,7 @@ const layer = Layer.effect(
             tool.skill,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
+            ...(tool.sendToPhone ? [tool.sendToPhone] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
