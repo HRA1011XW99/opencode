@@ -320,7 +320,7 @@ const nativeCredentialSettings = (
   if (!credential) return {}
   if (credential.type === "external") {
     if (specifier.startsWith("@opencode/ai/providers/amazon-bedrock") && credential.methodID === "aws-credentials")
-      return { auth: "sigv4", profile: credential.metadata.profile, credentials: undefined }
+      return { auth: "sigv4", profile: credential.metadata?.profile, credentials: undefined }
     return {}
   }
   if (
