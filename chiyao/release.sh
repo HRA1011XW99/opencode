@@ -10,7 +10,7 @@ set -euo pipefail
 n="${1:?用法：bash chiyao/release.sh <本次序号>}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 pkg="$root/packages/opencode"
-up="$(node -p "require('$pkg/package.json').version")"
+up="$(cd "$pkg" && node -p "require('./package.json').version")"
 tag="chiyao-v$up-$n"
 ver="$up-chiyao.$n"
 
