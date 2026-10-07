@@ -292,7 +292,10 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
 
 function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv) {
   if (process.platform === "win32" && Shell.ps(shell)) {
-    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], {
+    // chiyao: Windows PowerShell writes in the OEM code page (GBK on Chinese systems) while output is
+    // decoded as UTF-8, so non-ASCII paths came back garbled and the model guessed names. Force UTF-8.
+    const utf8 = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8;$OutputEncoding=[System.Text.Encoding]::UTF8;"
+    return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", utf8 + command], {
       cwd,
       env,
       stdin: "ignore",
