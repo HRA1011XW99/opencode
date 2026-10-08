@@ -9,6 +9,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { ChiyaoHook } from "@/chiyao/hook"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -302,6 +303,35 @@ export const ReadTool = Tool.define<
 
       const mime = sniffAttachmentMime(sample, FSUtil.mimeType(filepath))
       const isImage = SUPPORTED_IMAGE_MIMES.has(mime)
+
+      // Chiyao: a model that cannot see images gets a vision model's description instead of
+      // the picture. Chiyao decides, since it knows which model this session runs on.
+      if (isImage && ChiyaoHook.enabled()) {
+        const seen = yield* Effect.tryPromise({
+          try: () =>
+            ChiyaoHook.call("vision", { sessionID: ctx.sessionID, path: filepath }, 180_000) as Promise<{
+              native?: boolean
+              text?: string
+              why?: string
+            }>,
+          catch: (e) => new Error(e instanceof Error ? e.message : String(e)),
+        }).pipe(Effect.orElseSucceed(() => ({ native: true }) as { native?: boolean; text?: string; why?: string }))
+        if (!seen.native) {
+          const output = seen.text
+            ? `This model cannot see images, so a vision model looked at it. Image content:
+${seen.text}`
+            : `This model cannot see images, and the image could not be described (${seen.why || "unknown reason"}). Inform the user.`
+          return {
+            title,
+            output,
+            metadata: {
+              preview: output,
+              truncated: false,
+              loaded: loaded.map((item) => item.filepath),
+            },
+          }
+        }
+      }
 
       if (isImage || isPdfAttachment(mime)) {
         const bytes = yield* fs.readFile(filepath)
